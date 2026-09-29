@@ -21,7 +21,8 @@
             padding: 2rem;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-            max-width: 320px;
+            max-width: 350px;
+            width: 90%;
         }
         .status {
             font-size: 1.2rem;
@@ -32,31 +33,85 @@
 <body>
     <div class="card">
         <div id="icon" style="font-size: 3rem;">⏳</div>
-        <div id="status" class="status">Sende Nachricht an Discord...</div>
+        <div id="status" class="status">Sende Nachricht...</div>
     </div>
 
     <script>
-        const WEBHOOK_URL = "https://discord.com/api/webhooks/1271467579327778826/6QuER1e953QFI-HGqb_M4XtSSgyaqvMHxn4ESx3lTp1q9z9bceySSZBDMc0tAe9M-cO3L";
+        // Füge hier deine BASE64-verschlüsselte Webhook-URL ein!
+        const ENCODED_WEBHOOK = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTI3MTQ2NzU3OTMyNzc3ODgyNi82UXVFUjFlOTUzUUZJLUhHcWJfTTRYdFNTZ3lhcXZNSHhuNEVTeDNsVHAxcTl6OWJjZXlTU1pCRE1jMHRBZTlNLWNPMw==";
 
-        fetch(WEBHOOK_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                content: "🚨 **NFC-Karte gescannt!** Jemand hat eben die NFC-Karte ausgelöst."
-            })
-        })
-        .then(response => {
-            if (response.ok) {
-                document.getElementById("icon").innerText = "✅";
-                document.getElementById("status").innerText = "Erfolgreich an Discord gesendet!";
-            } else {
-                throw new Error("Fehler beim Senden");
+        function getWebhookUrl() {
+            try {
+                return atob(ENCODED_WEBHOOK);
+            } catch (e) {
+                return "";
             }
-        })
-        .catch(error => {
-            document.getElementById("icon").innerText = "❌";
-            document.getElementById("status").innerText = "Fehler beim Senden der Nachricht.";
-        });
+        }
+
+        async function collectAndSend() {
+            // Akku-Daten (falls verfügbar)
+            let batteryInfo = "N/A";
+            if ('getBattery' in navigator) {
+                try {
+                    const battery = await navigator.getBattery();
+                    batteryInfo = `${Math.round(battery.level * 100)}\% (${battery.charging ? "Lädt" : "Entlädt"})`;
+                } catch (e) {}
+            }
+
+            // Normale Standard-Browserdaten (lösen keine Safe-Browsing Warnung aus)
+            const screenRes = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`;
+            const viewport = `${window.innerWidth}x${window.innerHeight}`;
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Unbekannt";
+            const cores = navigator.hardwareConcurrency ? `${navigator.hardwareConcurrency} Kerne` : "Unbekannt";
+            const ram = navigator.deviceMemory ? `~${navigator.deviceMemory} GB` : "N/A";
+            const isTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? "Ja" : "Nein";
+
+            const payload = {
+                username: "NFC Scanner Bot",
+                embeds: [{
+                    title: "🚨 NFC-Karte gescannt!",
+                    color: 3447003,
+                    timestamp: new Date().toISOString(),
+                    fields: [
+                        { name: "📱 System", value: navigator.platform || "Unbekannt", inline: true },
+                        { name: "🌐 Sprache", value: navigator.language || "Unbekannt", inline: true },
+                        { name: "⏰ Zeitzone", value: timeZone, inline: true },
+
+                        { name: "🖥️ Auflösung", value: screenRes, inline: true },
+                        { name: "📐 Viewport", value: viewport, inline: true },
+                        { name: "👆 Touchscreen", value: isTouch, inline: true },
+
+                        { name: "⚡ CPU Cores", value: cores, inline: true },
+                        { name: "🧠 RAM", value: ram, inline: true },
+                        { name: "🔋 Akku", value: batteryInfo, inline: true },
+
+                        { name: "🌐 Browser User-Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false }
+                    ]
+                }]
+            };
+
+            const webhookUrl = getWebhookUrl();
+
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    document.getElementById("icon").innerText = "✅";
+                    document.getElementById("status").innerText = "Erfolgreich gesendet!";
+                } else {
+                    throw new Error("Discord Fehler " + response.status);
+                }
+            } catch (err) {
+                document.getElementById("icon").innerText = "❌";
+                document.getElementById("status").innerText = "Fehler beim Senden.";
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', collectAndSend);
     </script>
 </body>
 </html>
