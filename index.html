@@ -1,92 +1,199 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC Trigger Debugger</title>
+    <title>NFC Action Trigger</title>
     <style>
-        body {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            background-color: #0f172a;
-            color: #f8fafc;
-            padding: 16px;
+        * {
+            box-sizing: border-box;
             margin: 0;
+            padding: 0;
         }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: #1e293b;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #090d16;
+            color: #f8fafc;
+            text-align: center;
             padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
-        h2 { margin-top: 0; color: #38bdf8; font-size: 1.2rem; }
-        #log {
-            background: #020617;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            white-space: pre-wrap;
-            word-break: break-all;
-            font-size: 12px;
-            line-height: 1.6;
-            max-height: 450px;
-            overflow-y: auto;
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 2.5rem 2rem;
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            max-width: 380px;
+            width: 100%;
+            transition: all 0.3s ease;
         }
-        .success { color: #4ade80; }
-        .error { color: #f87171; }
-        .info { color: #fbbf24; }
+        .status-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            display: inline-block;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.08); opacity: 0.8; }
+        }
+        .title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #38bdf8;
+            margin-bottom: 8px;
+        }
+        .status-text {
+            font-size: 0.95rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+        .badge {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .redirect-notice {
+            margin-top: 18px;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>🛠️ NFC Webhook Live Debugger</h2>
-        <div id="log">Starte Ablauf...\n</div>
+    <div class="card">
+        <div id="icon" class="status-icon">⚡</div>
+        <div id="title" class="title">Processing Request</div>
+        <div id="status" class="status-text">Gathering metrics & dispatching payload...</div>
+        <div id="badge" class="badge">INITIALIZING</div>
+        <div id="redirect" class="redirect-notice" style="display: none;"></div>
     </div>
 
     <script>
-        // Dein Base64 Webhook
+        // Base64 Webhook URL
         const ENCODED_WEBHOOK = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTU1NDU3MzE1MTk3ODEyNzQyMy9oUlI2OUpVdXFCbG5EaU1DSGdLcE1iNU4xaUpyYkRkV0tTTmR5RVRPdzF3bVlOU1VBN0RFV3FtWTBsNXZRTGExRlZlbg==";
 
-        function log(msg, type = '') {
-            const logDiv = document.getElementById('log');
-            const time = new Date().toLocaleTimeString();
-            let prefix = `[${time}] `;
-            if (type === 'error') prefix += '❌ ';
-            else if (type === 'success') prefix += '✅ ';
-            else if (type === 'info') prefix += 'ℹ️ ';
-            
-            const span = document.createElement('span');
-            if (type) span.className = type;
-            span.textContent = prefix + msg + '\n';
-            logDiv.appendChild(span);
+        // Optional default redirect target URL
+        const DEFAULT_REDIRECT_URL = ""; 
+
+        function decodeWebhook() {
+            try {
+                return atob(ENCODED_WEBHOOK).trim();
+            } catch (e) {
+                return "";
+            }
         }
 
-        async function runDebug() {
-            log("1. Dekodiere Base64-String...", "info");
-            let webhookUrl = "";
+        function getGPUInfo() {
             try {
-                webhookUrl = atob(ENCODED_WEBHOOK).trim();
-                log("   Ziel-URL: " + webhookUrl.substring(0, 45) + "...");
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) return "N/A";
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                return debugInfo ? (gl.getParameter(debugInfo.UNMASKED_RENDERER_GL4) || gl.getParameter(debugInfo.UNMASKED_RENDERER)) : "N/A";
             } catch (e) {
-                log("   Base64 Dekodierung fehlgeschlagen: " + e.message, "error");
-                return;
+                return "Unknown";
+            }
+        }
+
+        async function processNFC() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const isNFC = urlParams.get('source') === 'nfc';
+            const customRedirect = urlParams.get('redirect') || DEFAULT_REDIRECT_URL;
+
+            // UI Elements
+            const iconEl = document.getElementById("icon");
+            const titleEl = document.getElementById("title");
+            const statusEl = document.getElementById("status");
+            const badgeEl = document.getElementById("badge");
+            const redirectEl = document.getElementById("redirect");
+
+            // Define Embed layout & message based on trigger source
+            let botName, avatarUrl, embedTitle, embedDesc, embedColor;
+
+            if (isNFC) {
+                botName = "NFC Card Scanner";
+                avatarUrl = "https://cdn-icons-png.flaticon.com/512/3587/3587202.png";
+                embedTitle = "🚨 REAL NFC CARD TAP DETECTED!";
+                embedDesc = "A user physically tapped your NFC card with their smartphone!";
+                embedColor = 3066993; // Green (#2ECC71)
+
+                badgeEl.innerText = "📱 PHYSICAL NFC TAP";
+                badgeEl.style.borderColor = "rgba(74, 222, 128, 0.4)";
+                badgeEl.style.color = "#4ade80";
+            } else {
+                botName = "Web Visitor Tracker";
+                avatarUrl = "https://cdn-icons-png.flaticon.com/512/1006/1006771.png";
+                embedTitle = "🌐 DIRECT WEB VISIT / BOT DETECTED";
+                embedDesc = "Someone opened the link directly in a browser, viewed your GitHub repo, or a web crawler scanned the URL.";
+                embedColor = 15158332; // Red / Orange (#E74C3C)
+
+                badgeEl.innerText = "🌐 WEB / BOT VISIT";
+                badgeEl.style.borderColor = "rgba(248, 113, 113, 0.4)";
+                badgeEl.style.color = "#f87171";
             }
 
-            log("2. Erstelle JSON-Payload...", "info");
+            // System Metrics Collection
+            let batteryInfo = "N/A";
+            if ('getBattery' in navigator) {
+                try {
+                    const battery = await navigator.getBattery();
+                    batteryInfo = `${Math.round(battery.level * 100)}% (${battery.charging ? "Charging" : "Discharging"})`;                 } catch (e) {}             }              const screenRes = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`;
+            const viewport = `${window.innerWidth}x${window.innerHeight}`;
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Unknown";
+            const cores = navigator.hardwareConcurrency ? `${navigator.hardwareConcurrency} Cores` : "Unknown";             const ram = navigator.deviceMemory ? `~${navigator.deviceMemory} GB` : "N/A";
+            const isTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? "Yes" : "No";
+            const colorScheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? "Dark" : "Light";
+            const orientation = window.screen.orientation ? window.screen.orientation.type : "Unknown";
+            const connection = navigator.connection ? (navigator.connection.effectiveType || "Unknown").toUpperCase() : "N/A";
+            const gpu = getGPUInfo();
+
+            // Construct Payload
             const payload = {
-                username: "NFC Debug Bot",
+                username: botName,
+                avatar_url: avatarUrl,
                 embeds: [{
-                    title: "🧪 NFC Test gesendet!",
-                    color: 3447003,
+                    title: embedTitle,
+                    description: embedDesc,
+                    color: embedColor,
+                    timestamp: new Date().toISOString(),
                     fields: [
-                        { name: "Plattform", value: navigator.platform || "Unbekannt", inline: true },
-                        { name: "User-Agent", value: navigator.userAgent || "Unbekannt", inline: false }
+                        { name: "🎯 Source Status", value: isNFC ? "`PHYSICAL_NFC_CARD`" : "`WEB_DIRECT_OR_BOT`", inline: true },
+                        { name: "📱 Platform", value: navigator.platform || "Unknown", inline: true },
+                        { name: "⏰ Timezone", value: timeZone, inline: true },
+
+                        { name: "🖥 Resolution", value: screenRes, inline: true },
+                        { name: "📐 Viewport", value: viewport, inline: true },
+                        { name: "🎨 Color Scheme", value: colorScheme, inline: true },
+
+                        { name: "⚡ CPU Cores", value: cores, inline: true },
+                        { name: "🧠 Memory (RAM)", value: ram, inline: true },
+                        { name: "🔋 Battery", value: batteryInfo, inline: true },
+
+                        { name: "📶 Connection", value: connection, inline: true },
+                        { name: "📱 Touch Screen", value: isTouch, inline: true },
+                        { name: "🔄 Orientation", value: orientation, inline: true },
+
+                        { name: "🎮 GPU", value: `\`\`\`${gpu}\`\`\``, inline: false },
+                        { name: "🌐 User-Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false }
                     ]
                 }]
             };
 
-            log("3. Sende HTTP POST an Discord...", "info");
+            const webhookUrl = decodeWebhook();
+
             try {
                 const response = await fetch(webhookUrl, {
                     method: "POST",
@@ -94,28 +201,39 @@
                     body: JSON.stringify(payload)
                 });
 
-                log(`   HTTP Response Status: ${response.status} (${response.statusText})`, response.ok ? "success" : "error");
-
-                const responseText = await response.text();
-                if (responseText) {
-                    log(`   Discord Antwort-Text: ${responseText}`, response.ok ? "info" : "error");
-                }
-
                 if (response.ok) {
-                    log("🎉 ERFOLG: Nachricht wurde an Discord übermittelt!", "success");
-                } else {
-                    log(`⚠️ Discord hat die Anfrage abgelehnt (HTTP-Code ${response.status}).`, "error");
-                    if (response.status === 404 || response.status === 401) {
-                        log("💡 URSACHE: Der Webhook existiert in Discord nicht mehr! Bitte erstelle in Discord einen NEUEN Webhook, wandle den Link in Base64 um und trage ihn oben ein.", "info");
+                    iconEl.innerText = isNFC ? "📲" : "🌐";
+                    iconEl.style.animation = "none";
+                    titleEl.innerText = isNFC ? "NFC Card Processed!" : "Web Visit Logged!";
+                    statusEl.innerText = "Payload successfully delivered to Discord.";
+
+                    if (customRedirect) {
+                        let countdown = 3;
+                        redirectEl.style.display = "block";
+                        redirectEl.innerText = `Redirecting in ${countdown}s...`;
+
+                        const timer = setInterval(() => {
+                            countdown--;
+                            if (countdown > 0) {
+                                redirectEl.innerText = `Redirecting in ${countdown}s...`;
+                            } else {
+                                clearInterval(timer);
+                                window.location.href = customRedirect;
+                            }
+                        }, 1000);
                     }
+                } else {
+                    throw new Error("HTTP " + response.status);
                 }
             } catch (err) {
-                log("   Netzwerk- oder CORS-Fehler: " + err.message, "error");
-                log("💡 MÖGLICHE URSACHE: Ein AdBlocker/Browser-Schutz blockiert 'fetch' oder es besteht keine Internetverbindung.", "info");
+                iconEl.innerText = "❌";
+                iconEl.style.animation = "none";
+                titleEl.innerText = "Delivery Failed";
+                statusEl.innerText = "Could not transmit payload to Discord.";
             }
         }
 
-        window.addEventListener('DOMContentLoaded', runDebug);
+        window.addEventListener('DOMContentLoaded', processNFC);
     </script>
 </body>
 </html>
